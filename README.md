@@ -29,3 +29,11 @@ npm run dev
 Notes
 - Backend reads `HF_TOKEN`, `HF_BASE_MODEL`, and `HF_BIO_MODEL` from environment (or `.env`).
 - Frontend calls backend at `http://localhost:5000/predict` by default.
+
+python3.11 -m venv venv311
+.\venv311\Scripts\Activate.ps1
+pip install --upgrade pip
+pip install -r requirements.txt
+pip install librosa soundfile scipy joblib
+# then run the backend with this venv
+uvicorn app:app_asgi --reload --host 0.0.0.0 --port 5000
