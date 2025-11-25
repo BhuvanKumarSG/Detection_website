@@ -1,0 +1,13 @@
+venv/
+venv311/
+env/
+__pycache__/
+.env
+node_modules/
+dist/
+build/
+*.pyc
+/.vscode/
+# Virtual env inside backend
+/backend/venv311/
+/.idea/
