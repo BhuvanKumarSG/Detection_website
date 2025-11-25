@@ -11,3 +11,6 @@ build/
 # Virtual env inside backend
 /backend/venv311/
 /.idea/
+
+# Local Netlify folder
+.netlify

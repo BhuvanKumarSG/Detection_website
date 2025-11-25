@@ -1,0 +1,13 @@
+[build]
+  # If your frontend is in the `frontend` subfolder, use the command below
+  command = "npm --prefix frontend run build"
+  publish = "frontend/dist"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[dev]
+  # Useful for local Netlify CLI dev
+  framework = "vite"

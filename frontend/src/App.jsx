@@ -1,5 +1,8 @@
 import React, { useState, useRef } from 'react'
 
+// Use Vite env var for backend URL (set VITE_API_URL in Netlify env)
+const API = import.meta.env.VITE_API_URL ?? 'http://localhost:5000'
+
 export default function App() {
   const [dragOver, setDragOver] = useState(false)
   const [file, setFile] = useState(null)
