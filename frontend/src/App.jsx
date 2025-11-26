@@ -11,6 +11,7 @@ export default function App() {
   const [useBase, setUseBase] = useState(true)
   const [useBio, setUseBio] = useState(false)
   const fileRef = useRef()
+  const [lastError, setLastError] = useState(null)
 
   function onDrop(e) {
     e.preventDefault()
@@ -32,17 +33,20 @@ export default function App() {
     if (useBase) form.append('models', 'base')
     if (useBio) form.append('models', 'bio')
 
-    try {
+      try {
       setLoading(true)
       setResults(null)
-      const resp = await fetch('http://localhost:5000/predict', {
+      setLastError(null)
+      const resp = await fetch(`${API}/predict`, {
         method: 'POST',
         body: form
       })
       const json = await resp.json()
       setResults(json)
     } catch (err) {
-      setResults({ error: err.message })
+      const msg = err && err.message ? err.message : String(err)
+      setLastError(msg)
+      setResults({ error: msg })
     } finally {
       setLoading(false)
     }
@@ -135,6 +139,10 @@ export default function App() {
         ) : (
           <div>No results yet.</div>
         )}
+      </div>
+      <div style={{marginTop:12,fontSize:12,color:'#334'}}>
+        <div><strong>API:</strong> {API}</div>
+        <div><strong>Last error:</strong> {lastError || 'none'}</div>
       </div>
     </div>
   )

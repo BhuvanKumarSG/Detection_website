@@ -15,6 +15,7 @@ app = Flask(__name__)
 CORS(app)
 
 
+
 def call_hf_model(model_id: str, file_bytes: bytes):
     """Call Hugging Face Inference API for a single model id using raw bytes."""
     if not model_id:
