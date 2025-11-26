@@ -14,10 +14,14 @@ import io
 import numpy as np
 
 def _default_paths():
-    # Check environment variables first, then default locations (adjust if needed)
+    # Check environment variables first. If not set, default to repository-local
+    # paths under backend/models/ so hosts (Render) can include model files in the repo.
+    repo_dir = Path(__file__).parent
+    default_base = repo_dir / 'models' / 'base_model_full.ckpt'
+    default_bio = repo_dir / 'models' / 'bio_model_full.ckpt'
     return {
-        'base': os.getenv('LOCAL_BASE_CKPT', r'D:\Danush\detectionCPU\base_model_full.ckpt'),
-        'bio': os.getenv('LOCAL_BIO_CKPT', r'D:\Danush\detectionCPU\bio_model_full.ckpt'),
+        'base': os.getenv('LOCAL_BASE_CKPT') or str(default_base),
+        'bio': os.getenv('LOCAL_BIO_CKPT') or str(default_bio),
     }
 
 _models = {}

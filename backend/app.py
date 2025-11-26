@@ -4,16 +4,64 @@ import os
 import requests
 from dotenv import load_dotenv
 from asgiref.wsgi import WsgiToAsgi
+import logging
 
 load_dotenv()
 
 HF_TOKEN = os.getenv("HF_TOKEN")
 HF_BASE_MODEL = os.getenv("HF_BASE_MODEL")
 HF_BIO_MODEL = os.getenv("HF_BIO_MODEL")
+# Allow disabling local fallback (set to '0' or 'false' to disable)
+ALLOW_LOCAL_FALLBACK = os.getenv("ALLOW_LOCAL_FALLBACK", "1")
 
 app = Flask(__name__)
 FRONTEND_URL ="https://detectionwebsite.netlify.app"
 CORS(app, resources={r"/predict": {"origins": FRONTEND_URL}})
+
+# Working directory for model paths inside the repo
+BASE_DIR = os.path.dirname(__file__)
+MODELS_DIR = os.path.join(BASE_DIR, 'models')
+
+# Configure basic logging to stdout so Render captures messages
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('detection-backend')
+
+# Try to preload local models at import time if configured to use local model ids.
+def _preload_local_models():
+    # Only attempt to preload when LOCAL usage is configured in env vars
+    try:
+        b = str(HF_BASE_MODEL or '').lower()
+        bi = str(HF_BIO_MODEL or '').lower()
+        want_local = any(x.startswith('local') for x in (b, bi))
+        if not want_local:
+            return
+        logger.info('Preloading local models as requested by env vars')
+        try:
+            from local_classifier import _ensure_model
+        except Exception:
+            try:
+                from .local_classifier import _ensure_model
+            except Exception as e:
+                logger.exception('Failed importing local_classifier for preload: %s', e)
+                return
+
+        if b.startswith('local'):
+            try:
+                _ensure_model('base')
+                logger.info('Preloaded local base model')
+            except Exception as e:
+                logger.exception('Failed to preload base model: %s', e)
+        if bi.startswith('local'):
+            try:
+                _ensure_model('bio')
+                logger.info('Preloaded local bio model')
+            except Exception as e:
+                logger.exception('Failed to preload bio model: %s', e)
+    except Exception:
+        logger.exception('Unexpected error during local preload')
+
+# Preload now (module import time) so startup logs capture any issues
+_preload_local_models()
 
 
 def call_hf_model(model_id: str, file_bytes: bytes):
@@ -29,8 +77,11 @@ def call_hf_model(model_id: str, file_bytes: bytes):
     except Exception as e:
         return {"error": str(e)}
 
-    # If the router returns 404 (model not deployed), try local sklearn-based fallback
+    # If the router returns 404 (model not deployed), optionally try local sklearn-based fallback
     if resp.status_code == 404:
+        if str(ALLOW_LOCAL_FALLBACK).lower() in ("0", "false"):
+            # Explicitly disabled local fallback — return the router response
+            return {"status_code": resp.status_code, "result_text": resp.text, "error": "model not deployed on Hugging Face and local fallback disabled"}
         # model_id may be a repo id or keyword; for local fallback accept 'base' or 'bio'
         try:
             from .local_classifier import predict_from_bytes
@@ -99,6 +150,32 @@ def predict():
             results[label] = {"error": "model not configured on server"}
             continue
 
+        # If the configured model_id explicitly requests local models, call local classifier directly.
+        # Use 'local' or 'local:base' / 'local:bio' to force local usage (backend must have LOCAL_*_CKPT env vars set).
+        try:
+            if str(model_id).lower().startswith('local'):
+                try:
+                    from .local_classifier import predict_from_bytes
+                except Exception:
+                    try:
+                        from local_classifier import predict_from_bytes
+                    except Exception as e:
+                        results[label] = {"error": "local classifier import failed", "detail": str(e)}
+                        continue
+
+                # allow local:base or local:bio syntax; default to label mapping
+                parts = str(model_id).split(':', 1)
+                key = parts[1] if len(parts) > 1 and parts[1] else label
+                try:
+                    local_result = predict_from_bytes(file_bytes, key=key)
+                    results[label] = {"status_code": "local", "result": local_result}
+                except Exception as e:
+                    results[label] = {"status_code": "local", "local_error": str(e)}
+                continue
+        except Exception:
+            # if anything goes wrong with local detection, fall back to HF call
+            pass
+
         results[label] = call_hf_model(model_id, file_bytes)
 
     return jsonify(results)
@@ -114,6 +191,27 @@ if __name__ == '__main__':
 @app.route("/", methods=["GET"])
 def index():
     return jsonify({"status": "ok", "message": "Detection backend running. POST /predict with 'file' and 'models' fields."})
+
+
+@app.route('/debug/files', methods=['GET'])
+def debug_files():
+    """List files under backend/models for debugging deployments (safe to remove later)."""
+    try:
+        files = []
+        if os.path.isdir(MODELS_DIR):
+            for fn in os.listdir(MODELS_DIR):
+                p = os.path.join(MODELS_DIR, fn)
+                files.append({
+                    'name': fn,
+                    'size': os.path.getsize(p) if os.path.isfile(p) else None,
+                    'is_file': os.path.isfile(p)
+                })
+        else:
+            return jsonify({'error': 'models dir missing', 'path': MODELS_DIR}), 404
+        return jsonify({'models_dir': MODELS_DIR, 'files': files})
+    except Exception as e:
+        logger.exception('Error listing models dir: %s', e)
+        return jsonify({'error': str(e)}), 500
 
 # Expose an ASGI app so you can run the Flask app with Uvicorn if preferred.
 app_asgi = WsgiToAsgi(app)
