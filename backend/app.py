@@ -12,8 +12,8 @@ HF_BASE_MODEL = os.getenv("HF_BASE_MODEL")
 HF_BIO_MODEL = os.getenv("HF_BIO_MODEL")
 
 app = Flask(__name__)
-CORS(app)
-
+FRONTEND_URL ="https://detectionwebsite.netlify.app"
+CORS(app, resources={r"/predict": {"origins": FRONTEND_URL}})
 
 
 def call_hf_model(model_id: str, file_bytes: bytes):
@@ -105,8 +105,10 @@ def predict():
 
 
 if __name__ == '__main__':
-    # For local development only. Prefer using `flask run` in production/dev.
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # For local development only. Use the PORT env var when present (Render provides $PORT).
+    # This keeps local default at 5000 but allows the host to override via environment.
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)
 
 
 @app.route("/", methods=["GET"])
